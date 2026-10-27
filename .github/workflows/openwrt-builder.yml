@@ -36,7 +36,11 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@main
-
+    - name: Configure Fast APT Mirror
+      uses: vegardit/fast-apt-mirror.sh@v1
+      with:
+        country: "US"   # 可选：指定国家代码，如US, DE, CN等，不填则自动选择
+        speedtests: 5   # 可选：测试的镜像数量，默认10个，可适当减少以节省时间
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive

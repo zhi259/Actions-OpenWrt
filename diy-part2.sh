@@ -289,4 +289,13 @@ if ! grep -q "hiwifi_c526a" package/firmware/ipq-wifi/Makefile; then
 	echo '$(eval $(call generate-ipq-wifi-package,hiwifi_c526a,HiWiFi C526A))' >> package/firmware/ipq-wifi/Makefile
 fi
 
+# 手动下载并放置 upx 二进制，解决 mihomo 编译依赖缺失
+UPX_VER="4.2.4"
+UPX_URL="https://github.com/upx/upx/releases/download/v${UPX_VER}/upx-${UPX_VER}-amd64_linux.tar.xz"
+wget -q "$UPX_URL" -O /tmp/upx.tar.xz && \
+tar -xJf /tmp/upx.tar.xz -C /tmp --strip-components=1 && \
+mkdir -p staging_dir/host/bin && \
+cp /tmp/upx staging_dir/host/bin/upx && \
+chmod +x staging_dir/host/bin/upx
+
 # ========== 秘制菜谱 结束 ==========

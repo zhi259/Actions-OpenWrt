@@ -28,6 +28,232 @@ cat > target/linux/ipq40xx/files-6.6/arch/arm/boot/dts/qcom/qcom-ipq4019-c526a.d
 // ===== 把你的 DTS 内容整个粘贴到这里 =====
 // 从 `// SPDX-License-Identifier: GPL-2.0-or-later OR MIT` 开始
 // 一直到最后一个 `};`
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+#include "qcom-ipq4019.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/soc/qcom,tcsr.h>
+
+/ {
+	model = "HiWiFi C526A";
+	compatible = "hiwifi,c526a";
+
+	aliases {
+		led-boot = &led_status;
+		led-failsafe = &led_status;
+		led-running = &led_status;
+		led-upgrade = &led_status;
+		label-mac-device = &swport5; /* 以 WAN 口 MAC 作为标签 MAC，参考 A42 */
+	};
+
+	chosen {
+		bootargs-append = " root=/dev/ubiblock0_1"; /* NAND 设备通用，需根据实际 rootfs 卷名核对 */
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			label = "reset";
+			gpios = <&tlmm 59 GPIO_ACTIVE_LOW>; /* 沿用旧 DTS 的 reset GPIO */
+			linux,code = <KEY_RESTART>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_status: status {
+			function = LED_FUNCTION_STATUS;
+			color = <LED_COLOR_ID_BLUE>; /* 需实机核对颜色，占位 */
+			gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
+
+/* ---- TCSR & 必要外设（沿用 ipq40xx 通用配置） ---- */
+&prng { status = "okay"; };
+&crypto { status = "okay"; };
+&cryptobam { status = "okay"; };
+&blsp_dma { status = "okay"; };
+
+&tlmm {
+	serial_pins: serial_pinmux {
+		mux {
+			pins = "gpio60", "gpio61";
+			function = "blsp_uart0";
+			bias-disable;
+		};
+	};
+};
+
+&blsp1_uart1 {
+	pinctrl-0 = <&serial_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+/* ---- USB ---- */
+&usb3 {
+	status = "okay";
+};
+
+&usb3_dwc3 {
+	dr_mode = "host";
+};
+
+&usb2 {
+	status = "okay";
+};
+
+&usb2_hs_phy {
+	status = "okay";
+};
+
+/* ---- NAND：C526A 的 128MB NAND 在 &nand 节点上 ---- */
+&nand {
+	status = "okay";
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		partition@0 {
+			label = "u-boot";
+			reg = <0x0 0x100000>;
+			read-only;
+		};
+
+		partition@100000 {
+			label = "u-boot-env";
+			reg = <0x100000 0x80000>;
+		};
+
+		partition@180000 {
+			label = "bdinfo";
+			reg = <0x180000 0x80000>;
+			read-only;
+
+			nvmem-layout {
+				compatible = "fixed-layout";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				/* 参考旧提交：Vfac_mac 在 bdinfo 的 ASCII 文本区，偏移需实机确认。
+				   如果 24.10 支持 mac-base ASCII 布局，可改用 mac-base 引用整个分区。 */
+				macaddr_bdinfo: macaddr@18a {
+					reg = <0x18a 0x6>;
+				};
+			};
+		};
+
+		partition@200000 {
+			label = "firmware";
+			reg = <0x200000 0x7e00000>; /* 126MB，需按实际 flash 布局核对 */
+			compatible = "denx,fit"; /* 或 "openwrt,ubi"，取决于镜像格式 */
+		};
+	};
+};
+
+/* ---- 交换机：DSA 核心 ---- */
+&mdio {
+	status = "okay";
+};
+
+&gmac {
+	status = "okay";
+};
+
+&switch {
+	status = "okay";
+};
+
+/*
+ * 端口映射假设（必须根据旧 DTS 的 switch0 配置核对）：
+ * 旧 DTS 中 switch0 的 0u@eth0（CPU）、2:lan、3:lan、4:lan、以及 WAN 口。
+ * 在 QCA8075 + DSA 中，通常 CPU 口为 0，LAN 为 1~3，WAN 为 4 或 5。
+ * 下面按「WAN = swport5，LAN1~3 = swport2/3/4」占位，请对照 QCA8075 的 PHY 地址修正。
+ */
+&swport2 {
+	status = "okay";
+	label = "lan1";
+	nvmem-cell-names = "mac-address";
+	nvmem-cells = <&macaddr_bdinfo>;
+};
+
+&swport3 {
+	status = "okay";
+	label = "lan2";
+	nvmem-cell-names = "mac-address";
+	nvmem-cells = <&macaddr_bdinfo>;
+};
+
+&swport4 {
+	status = "okay";
+	label = "lan3";
+	nvmem-cell-names = "mac-address";
+	nvmem-cells = <&macaddr_bdinfo>;
+};
+
+&swport5 {
+	status = "okay";
+	label = "wan";
+	nvmem-cell-names = "mac-address";
+	nvmem-cells = <&macaddr_bdinfo>;
+};
+
+/* ---- Wi-Fi：QCA4019 双频（旧硬件中的 5G 两路） ---- */
+&wifi0 {
+	status = "okay";
+	qcom,ath10k-calibration-variant = "HiWiFi-C526A";
+	nvmem-cell-names = "pre-calibration";
+	nvmem-cells = <&precal_art_1000>;
+};
+
+&wifi1 {
+	status = "okay";
+	qcom,ath10k-calibration-variant = "HiWiFi-C526A";
+	nvmem-cell-names = "pre-calibration";
+	nvmem-cells = <&precal_art_5000>;
+};
+
+/* ---- ART 分区（QCA4019 校准数据来自 SPI NOR 的 ART 分区）---- */
+&blsp1_spi1 {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <24000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "0:ART";
+				reg = <0x0 0x10000>; /* 64KB ART，需核对 */
+
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					precal_art_1000: precal@1000 {
+						reg = <0x1000 0x2f20>;
+					};
+
+					precal_art_5000: precal@5000 {
+						reg = <0x5000 0x2f20>;
+					};
+				};
+			};
+		};
+	};
+};
 // ===== DTS 内容结束 =====
 C526A_DTS_EOF
 

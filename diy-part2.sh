@@ -20,7 +20,20 @@
 #sed -i 's/OpenWrt/P3TERX-Router/g' package/base-files/files/bin/config_generate
 
 # ========== 这是给 HiWiFi C526A 的“秘制菜谱” ==========
-
+# 清理 Lean 遗留符号，写入 24.10 正确的 target 配置
+sed -i '/^CONFIG_TARGET_ipq40xx/d' .config
+sed -i '/^CONFIG_TARGET_DEVICE_ipq40xx/d' .config
+sed -i '/^CONFIG_TARGET_BOARD=/d' .config
+sed -i '/^CONFIG_TARGET_SUBTARGET=/d' .config
+sed -i '/^CONFIG_TARGET_PROFILE=/d' .config
+sed -i '/^CONFIG_LINUX_5_4=/d' .config
+sed -i 's/^CONFIG_TARGET_MULTI_PROFILE=y/# CONFIG_TARGET_MULTI_PROFILE is not set/' .config
+sed -i 's/^CONFIG_TARGET_PER_DEVICE_ROOTFS=y/# CONFIG_TARGET_PER_DEVICE_ROOTFS is not set/' .config
+cat >> .config << 'EOF'
+CONFIG_TARGET_ipq40xx=y
+CONFIG_TARGET_ipq40xx_generic=y
+CONFIG_TARGET_ipq40xx_generic_DEVICE_hiwifi_c526a=y
+EOF
 # 1. 放入 DTS 设备树文件
 # 这会把之前准备好的DTS文件放到内核源码的正确位置
 mkdir -p target/linux/ipq40xx/files-6.6/arch/arm/boot/dts/qcom/

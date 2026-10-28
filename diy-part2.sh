@@ -253,10 +253,27 @@ cat > target/linux/ipq40xx/files-6.6/arch/arm/boot/dts/qcom/qcom-ipq4019-c526a.d
 // ===== DTS 内容结束 =====
 C526A_DTS_EOF
 
-# 2. 把 C526A 添加到网络配置脚本 (02_network) 中
-# 这会让系统在首次开机时知道如何初始化网口
-sed -i '/8dev,habanero-dvk|\\/i\	hiwifi,c526a)|\\' target/linux/ipq40xx/base-files/etc/board.d/02_network
-sed -i '/ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"/i\		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"\;\\' target/linux/ipq40xx/base-files/etc/board.d/02_network
+# 2. 用 Python 精确注入 02_network，避免 sed 生成坏分支
+python3 - << 'PYEOF'
+import re
+path = 'target/linux/ipq40xx/base-files/etc/board.d/02_network'
+with open(path) as f:
+    content = f.read()
+
+# 先删掉可能已经存在的错误注入
+content = re.sub(r'\thiwifi,c526a\)\|\\\n', '', content)
+
+# 在 zyxel,nbg6617) 块的 ;; 之后插入独立的 C526A 分支
+marker = '\t\tucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"\n\t\t;;\n'
+c526a = '\thiwifi,c526a)\n\t\tucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"\n\t\t;;\n'
+
+if 'hiwifi,c526a)' not in content:
+    content = content.replace(marker, marker + c526a, 1)
+
+with open(path, 'w') as f:
+    f.write(content)
+print("02_network: C526A injected")
+PYEOF
 
 # 3. 把 C526A 的设备定义添加到镜像生成规则 (generic.mk) 中
 # 这告诉编译系统如何为你的设备生成最终的固件文件
@@ -284,6 +301,17 @@ if ! grep -q "hiwifi_c526a" package/firmware/ipq-wifi/Makefile; then
 	sed -i '/^ALLWIFIBOARDS:=/a\hiwifi_c526a' package/firmware/ipq-wifi/Makefile
 	echo '$(eval $(call generate-ipq-wifi-package,hiwifi_c526a,HiWiFi C526A))' >> package/firmware/ipq-wifi/Makefile
 fi
+# 5. 强制写入正确的 target 配置（必须在 make defconfig 之前）
+sed -i '/^CONFIG_TARGET_ipq40xx/d' .config
+sed -i '/^CONFIG_TARGET_DEVICE_ipq40xx/d' .config
+sed -i '/^CONFIG_TARGET_BOARD=/d' .config
+sed -i '/^CONFIG_TARGET_SUBTARGET=/d' .config
+sed -i '/^CONFIG_TARGET_PROFILE=/d' .config
+cat >> .config << 'TARGET_EOF'
+CONFIG_TARGET_ipq40xx=y
+CONFIG_TARGET_ipq40xx_generic=y
+CONFIG_TARGET_ipq40xx_generic_DEVICE_hiwifi_c526a=y
+TARGET_EOF
 
 # 手动下载并放置 upx 二进制，解决 mihomo 编译依赖缺失
 UPX_VER="4.2.4"

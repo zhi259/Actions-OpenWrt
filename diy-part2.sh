@@ -99,10 +99,6 @@ cat > target/linux/ipq40xx/files-6.6/arch/arm/boot/dts/qcom/qcom-ipq4019-c526a.d
 	status = "okay";
 };
 
-&usb3_dwc3 {
-	dr_mode = "host";
-};
-
 &usb2 {
 	status = "okay";
 };
